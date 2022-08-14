@@ -2,7 +2,7 @@ General Information:
 --------------------
 
 This is a PHP Chat based on LE CHAT v.1.14. An up-to-date copy of this script can be downloaded at https://github.com/DanWin/le-chat-php
-The original perl LE CHAT script by Lucky Eddie can be downloaded at [his site](http://4fvfamdpoulu2nms.onion/lechat/) or via a tor2web proxy like [this one](https://4fvfamdpoulu2nms.onion.to/lechat/) if you don't have Tor installed.
+The original perl LE CHAT script by Lucky Eddie can be downloaded at [this github fork](https://github.com/virtualghetto/lechat).
 If you add your own cool features or have a feature request, please tell me and I will add them, if I like them.
 Please also let me know about any bugs you find in the code, so I can fix them.
 Now a piece of information about the origin of the name "LE CHAT" copied from the original script:
@@ -83,5 +83,5 @@ If you never used regex before, check out [this starting guide](http://docs.acti
 Live demo:
 ----------
 
-If you want to see the script in action, you can visit my [Tor hidden service](http://danschat356lctri3zavzh6fbxg2a7lo6z3etgkctzzpspewu7zdsaqd.onion/chat.php) or via [my clearnet proxy](https://chat.danwin1210.me/chat.php) if you don't have Tor installed.
+If you want to see the script in action, you can visit my [Tor hidden service](http://danschat356lctri3zavzh6fbxg2a7lo6z3etgkctzzpspewu7zdsaqd.onion/chat.php) or via [my clearnet proxy](https://chat.danwin1210.de/chat.php) if you don't have Tor installed.
 Considering this is a hidden service, you should be prepared for the worst case, as people tend to do illegal activities in the Tor network.
