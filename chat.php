@@ -40,6 +40,7 @@ $U=[];// This user data
 $db = null;// Database connection
 $memcached = null;// Memcached connection
 $language = LANG;// user selected language
+$scripts = []; //js enhancements
 $styles = []; //css styles
 $session = $_REQUEST['session'] ?? ''; //requested session
 // set session variable to cookie if cookies are enabled
@@ -53,7 +54,8 @@ cron();
 route();
 
 //  main program: decide what to do based on queries
-function route(){
+function route(): void
+{
 	global $U;
 	if(!isset($_REQUEST['action'])){
 		send_login();
@@ -94,7 +96,7 @@ function route(){
 		if(!isset($_POST['what'])){
 		}elseif($_POST['what']==='all'){
 			if(isset($_POST['confirm'])){
-				del_all_messages($U['nickname'], (int) ($U['status']==1 ? $U['entry'] : 0));
+				del_all_messages('', (int) ($U['status']==1 ? $U['entry'] : 0));
 			}else{
 				send_del_confirm();
 			}
@@ -231,15 +233,16 @@ function route_admin() : string {
 	return '';
 }
 
-function route_setup(){
+function route_setup(): void
+{
 	global $U;
 	if(!valid_admin()){
 		send_alogin();
 	}
-	$C['bool_settings']=['suguests', 'imgembed', 'timestamps', 'trackip', 'memkick', 'memkickalways', 'forceredirect', 'incognito', 'sendmail', 'modfallback', 'disablepm', 'eninbox', 'enablegreeting', 'sortupdown', 'hidechatters', 'personalnotes', 'publicnotes', 'filtermodkick', 'namedoers'];
+	$C['bool_settings']=['suguests', 'imgembed', 'timestamps', 'trackip', 'memkick', 'memkickalways', 'forceredirect', 'incognito', 'sendmail', 'modfallback', 'disablepm', 'eninbox', 'enablegreeting', 'sortupdown', 'hidechatters', 'personalnotes', 'publicnotes', 'filtermodkick', 'namedoers', 'hide_reload_post_box', 'hide_reload_messages', 'hide_profile', 'hide_admin', 'hide_notes', 'hide_clone', 'hide_rearrange', 'hide_help', 'postbox_delete_globally', 'allow_js'];
 	$C['colour_settings']=['colbg', 'coltxt'];
 	$C['msg_settings']=['msgenter', 'msgexit', 'msgmemreg', 'msgsureg', 'msgkick', 'msgmultikick', 'msgallkick', 'msgclean', 'msgsendall', 'msgsendmem', 'msgsendmod', 'msgsendadm', 'msgsendprv', 'msgattache'];
-	$C['number_settings']=['memberexpire', 'guestexpire', 'kickpenalty', 'entrywait', 'captchatime', 'messageexpire', 'messagelimit', 'maxmessage', 'maxname', 'minpass', 'defaultrefresh', 'numnotes', 'maxuploadsize', 'enfileupload'];
+	$C['number_settings']=['memberexpire', 'guestexpire', 'kickpenalty', 'entrywait', 'captchatime', 'messageexpire', 'messagelimit', 'maxmessage', 'maxname', 'minpass', 'defaultrefresh', 'numnotes', 'maxuploadsize', 'enfileupload', 'max_refresh_rate', 'min_refresh_rate'];
 	$C['textarea_settings']=['rulestxt', 'css', 'disabletext'];
 	$C['text_settings']=['dateformat', 'captchachars', 'redirect', 'chatname', 'mailsender', 'mailreceiver', 'nickregex', 'passregex', 'externalcss', 'metadescription', 'sysmessagetxt'];
 	$C['settings']=array_merge(['guestaccess', 'englobalpass', 'globalpass', 'captcha', 'dismemcaptcha', 'topic', 'guestreg', 'defaulttz'], $C['bool_settings'], $C['colour_settings'], $C['msg_settings'], $C['number_settings'], $C['textarea_settings'], $C['text_settings']); // All settings in the database
@@ -262,35 +265,69 @@ function route_setup(){
 }
 
 //  html output subs
-function prepare_stylesheets(bool $init = false){
-	global $U, $db, $styles;
-	$styles['fatal_error'] = 'body{background-color:#000000;color:#FF0033}';
-	$styles['default'] = 'body,iframe{background-color:#000000;color:#FFFFFF;font-size:14px;text-align:center}';
-	$styles['default'] .= 'a:visited{color:#B33CB4} a:link{color:#00A2D4} a:active{color:#55A2D4} #messages{word-wrap:break-word}';
-	$styles['default'] .= 'input,select,textarea{color:#FFFFFF;background-color:#000000} .messages a img{width:15%} .messages a:hover img{width:35%} ';
+function prepare_stylesheets(string $class): void
+{
+	global $U, $db, $scripts, $styles;
+	if($class === 'fatal_error') {
+		$styles[ 'fatal_error' ] = 'body{background-color:#000000;color:#FF0033}';
+	}
+	$styles['default'] = 'body,iframe{background-color:#000000;color:#FFFFFF;font-size:14px;text-align:center;width:100%;height:100%;margin:0;padding:0;border:none}';
+	$styles['default'] .= 'a:visited{color:#B33CB4} a:link{color:#00A2D4} a:active{color:#55A2D4}';
+	$styles['default'] .= 'input,select,textarea{color:#FFFFFF;background-color:#000000} ';
 	$styles['default'] .= '.error{color:#FF0033;text-align:left} .delbutton{background-color:#660000} .backbutton{background-color:#004400} #exitbutton{background-color:#AA0000} ';
 	$styles['default'] .= '.setup table table,.admin table table,.profile table table{width:100%;text-align:left} ';
 	$styles['default'] .= '.alogin table,.init table,.destroy_chat table,.delete_account table,.sessions table,.filter table,.linkfilter table,.notes table,.approve_waiting table,.del_confirm table,.profile table,.admin table,.backup table,.setup table{margin-left:auto;margin-right:auto} ';
 	$styles['default'] .= '.setup table table table,.admin table table table,.profile table table table{border-spacing:0px;margin-left:auto;margin-right:unset;width:unset} ';
 	$styles['default'] .= '.setup table table td,.backup #restoresubmit,.backup #backupsubmit,.admin table table td,.profile table table td,.login td+td,.alogin td+td{text-align:right} ';
 	$styles['default'] .= '.init td,.backup #restorecheck td,.admin #clean td,.admin #regnew td,.session td,.messages,.inbox,.approve_waiting td,.choose_messages,.greeting,.help,.login td,.alogin td{text-align:left} ';
-	$styles['default'] .= '.messages #chatters{max-height:100px;overflow-y:auto} .messages #chatters .messages #chatters table{border-spacing:0px} ';
-	$styles['default'] .= '.messages #chatters th,.messages #chatters td,.post #firstline{vertical-align:top} ';
 	$styles['default'] .= '.approve_waiting #action td:only-child,.help #backcredit,.login td:only-child,.alogin td:only-child,.init td:only-child{text-align:center} .sessions td,.sessions th,.approve_waiting td,.approve_waiting th{padding: 5px} ';
-	$styles['default'] .= '.sessions td td{padding: 1px} .messages #bottom_link{position:fixed;top:0.5em;right:0.5em} .messages #top_link{position:fixed;bottom:0.5em;right:0.5em} ';
+	$styles['default'] .= '.sessions td td{padding: 1px} .notes textarea{height:80vh;width:80%} ';
 	$styles['default'] .= '.post table,.controls table,.login table{border-spacing:0px;margin-left:auto;margin-right:auto} .login table{border:2px solid} .controls{overflow-y:none} ';
-	$styles['default'] .= '#manualrefresh{display:block;position:fixed;text-align:center;left:25%;width:50%;top:-200%;animation:timeout_messages ';
-	if(isset($U['refresh'])){
-		$styles['default'] .= $U['refresh']+20;
-	}else{
-		$styles['default'] .='160';
-	}
-	$styles['default'] .= 's forwards;z-index:2;background-color:#500000;border:2px solid #ff0000} ';
-	$styles['default'] .= '@keyframes timeout_messages{0%{top:-200%} 99%{top:-200%} 100%{top:0%}} ';
-	$styles['default'] .= '.notes textarea{height:80vh;width:80%} iframe{width:100%;height:100%;margin:0;padding:0;border:none}';
-	$styles['default'] .= '.msg{max-height:180px;overflow-y:auto}';
-	if($init || ! $db instanceof PDO){
+	if($class === 'init' || ! $db instanceof PDO){
 		return;
+	}
+	if($class === 'frameset'){
+		if(($U['status']>=5 || ($U['status']>2 && get_count_mods()==0)) && get_setting('enfileupload')>0 && get_setting('enfileupload')<=$U['status']){
+			$postheight='120px';
+		}else{
+			$postheight='100px';
+		}
+		if((!isset($_REQUEST['sort']) && !$U['sortupdown']) || (isset($_REQUEST['sort']) && $_REQUEST['sort']==0)) {
+			$styles[ 'frameset' ] = "#frameset-mid{position:fixed;top:$postheight;bottom:45px;left:0;right:0;margin:0;padding:0;overflow:hidden}";
+			$styles[ 'frameset' ] .= "#frameset-top{position:fixed;top:0;left:0;right:0;height:$postheight;margin:0;padding:0;overflow:hidden;border-bottom: 1px solid}";
+			$styles[ 'frameset' ] .= "#frameset-bot{position:fixed;bottom:0;left:0;right:0;height:45px;margin:0;padding:0;overflow:hidden;border-top:1px solid}";
+		} else{
+			$styles[ 'frameset' ] =" #frameset-mid{position:fixed;top:45px;bottom:$postheight;left:0;right:0;margin:0;padding:0;overflow:hidden}";
+			$styles[ 'frameset' ] .= "#frameset-top{position:fixed;top:0;left:0;right:0;height:45px;margin:0;padding:0;overflow:hidden;border-bottom:1px solid}";
+			$styles[ 'frameset' ] .= "#frameset-bot{position:fixed;bottom:0;left:0;right:0;height:$postheight;margin:0;padding:0;overflow:hidden;border-top:1px solid}";
+		}
+	}
+	if($class === 'filter'){
+		$styles['filter'] = 'table table{width:100%} ';
+		$styles['filter'] .= 'table table td:nth-child(1){width:8em;font-weight:bold} ';
+		$styles['filter'] .= 'table table td:nth-child(2),table table td:nth-child(3){width:12em} ';
+		$styles['filter'] .= 'table table td:nth-child(4){width:9em} ';
+		$styles['filter'] .= 'table table td:nth-child(5),table table td:nth-child(6),table table td:nth-child(7),table table td:nth-child(8){width:5em} ';
+	}
+	if($class === 'linkfilter'){
+		$styles['linkfilter'] = 'table table{width:100%} ';
+		$styles['linkfilter'] .= 'table table td:nth-child(1){width:8em;font-weight:bold} ';
+		$styles['linkfilter'] .= 'table table td:nth-child(2),table table td:nth-child(3){width:12em} ';
+		$styles['linkfilter'] .= 'table table td:nth-child(4),table table td:nth-child(5){width:5em} ';
+	}
+	if($class === 'post'){
+		$styles['post'] = '.spacer{width:10px} #firstline{vertical-align:top}';
+	}
+	if($class === 'messages'){
+		$styles['messages'] = '.nicklink{text-decoration:none}.channellink{text-decoration:underline}';
+		$styles['messages'] .= '#chatters{max-height:100px;overflow-y:auto} #chatters, #chatters table{border-spacing:0px} ';
+		$styles['messages'] .= '#manualrefresh{display:block;position:fixed;text-align:center;left:25%;width:50%;top:-200%;animation:timeout_messages ';
+		$styles['messages'] .= $U['refresh']+20;
+		$styles['messages'] .= 's forwards;z-index:2;background-color:#500000;border:2px solid #ff0000} ';
+		$styles['messages'] .= '@keyframes timeout_messages{0%{top:-200%} 99%{top:-200%} 100%{top:0%}} ';
+		$styles['messages'] .= '.msg{max-height:180px;overflow-y:auto} #bottom_link{position:fixed;top:0.5em;right:0.5em} #top_link{position:fixed;bottom:0.5em;right:0.5em} ';
+		$styles['messages'] .= '#chatters th,#chatters td{vertical-align:top} a img{width:15%} a:hover img{width:35%}';
+		$styles['messages'] .= '#messages{word-wrap:break-word}';
 	}
 	$css=get_setting('css');
 	$coltxt=get_setting('coltxt');
@@ -300,26 +337,57 @@ function prepare_stylesheets(bool $init = false){
 		$colbg=get_setting('colbg');
 	}
 	$styles['custom'] = preg_replace("/(\r?\n|\r\n?)/u", '', "body,iframe{background-color:#$colbg;color:#$coltxt} $css");
+	$allow_js = (bool) get_setting('allow_js');
+	if($allow_js){
+		$scripts['default'] = 'if(window.history.replaceState){window.history.replaceState(null,"");}';
+		if($class === 'frameset') {
+			$scripts[ 'frameset' ] = 'window.addEventListener("message", (e)=>{
+				if(e.data === "post_box_loaded"){
+					let autofocus = document.querySelector("iframe[name=post").contentDocument.querySelector("input[autofocus]");
+					if(autofocus){
+						autofocus.focus();
+					}
+				}
+			});';
+		}
+		if($class === 'post') {
+			$scripts[ 'post' ] = 'window.addEventListener("load", _=>{
+				window.top.postMessage("post_box_loaded", window.location.origin);
+			})';
+		}
+	}
 }
 
-function print_stylesheet(bool $init = false){
-	global $styles;
+function print_stylesheet(string $class): void
+{
+	global $scripts, $styles;
 	//default css
 	echo "<style>$styles[default]</style>";
-	if($init){
+	if ( $class === 'init' ) {
 		return;
+	}
+	if(isset($styles[$class])) {
+		echo "<style>$styles[$class]</style>";
 	}
 	//overwrite with custom css
 	echo "<style>$styles[custom]</style>";
+	$allow_js = (bool) get_setting( 'allow_js' );
+	if ( $allow_js ) {
+		echo "<script>$scripts[default]</script>";
+		if(isset($scripts[$class])) {
+			echo "<script>$scripts[$class]</script>";
+		}
+	}
 }
 
-function print_end(){
+function print_end(): void
+{
 	echo '</body></html>';
 	exit;
 }
 
 function credit() : string {
-	return '<small><br><br><a target="_blank" href="https://github.com/DanWin/le-chat-php" rel="noopener">LE CHAT-PHP - ' . VERSION . '</a></small>';
+	return '<small><br><br><a target="_blank" href="https://github.com/DanWin/le-chat-php" rel="noreferrer noopener">LE CHAT-PHP - ' . VERSION . '</a></small>';
 }
 
 function meta_html() : string {
@@ -365,17 +433,19 @@ function hidden(string $name='', string $value='') : string {
 	return "<input type=\"hidden\" name=\"$name\" value=\"$value\">";
 }
 
-function submit($value='', $extra_attribute='') : string {
+function submit(string $value='', string $extra_attribute='') : string {
 	return "<input type=\"submit\" value=\"$value\" $extra_attribute>";
 }
 
-function thr(){
+function thr(): void
+{
 	echo '<tr><td><hr></td></tr>';
 }
 
-function print_start(string $class='', int $ref=0, string $url=''){
+function print_start(string $class='', int $ref=0, string $url=''): void
+{
 	global $I, $language;
-	prepare_stylesheets($class === 'init');
+	prepare_stylesheets($class);
 	send_headers();
 	if(!empty($url)){
 		$url=str_replace('&amp;', '&', $url);// Don't escape "&" in URLs here, it breaks some (older) browsers and js refresh!
@@ -387,11 +457,10 @@ function print_start(string $class='', int $ref=0, string $url=''){
 	}
 	if($class==='init'){
 		echo "<title>$I[init]</title>";
-		print_stylesheet(true);
 	}else{
 		echo '<title>'.get_setting('chatname').'</title>';
-		print_stylesheet();
 	}
+	print_stylesheet($class);
 	echo "</head><body class=\"$class\">";
 	if($class!=='init' && ($externalcss=get_setting('externalcss'))!=''){
 		//external css - in body to make it non-renderblocking
@@ -399,7 +468,8 @@ function print_start(string $class='', int $ref=0, string $url=''){
 	}
 }
 
-function send_redirect(string $url){
+function send_redirect(string $url): void
+{
 	global $I;
 	$url=trim(htmlspecialchars_decode(rawurldecode($url)));
 	preg_match('~^(.*)://~u', $url, $match);
@@ -423,7 +493,8 @@ function send_redirect(string $url){
 	print_end();
 }
 
-function send_access_denied(){
+function send_access_denied(): void
+{
 	global $I, $U;
 	http_response_code(403);
 	print_start('access_denied');
@@ -433,7 +504,8 @@ function send_access_denied(){
 	print_end();
 }
 
-function send_captcha(){
+function send_captcha(): void
+{
 	global $I, $db, $memcached;
 	$difficulty=(int) get_setting('captcha');
 	if($difficulty===0 || !extension_loaded('gd')){
@@ -537,7 +609,8 @@ function send_captcha(){
 	echo '</td><td>'.hidden('challenge', $randid).'<input type="text" name="captcha" size="15" autocomplete="off" required></td></tr>';
 }
 
-function send_setup(array $C){
+function send_setup(array $C): void
+{
 	global $I, $U;
 	print_start('setup');
 	echo "<h2>$I[setup]</h2>".form('setup', 'save');
@@ -735,7 +808,8 @@ function send_setup(array $C){
 	print_end();
 }
 
-function restore_backup(array $C){
+function restore_backup(array $C): void
+{
 	global $db, $memcached;
 	if(!extension_loaded('json')){
 		return;
@@ -804,7 +878,8 @@ function restore_backup(array $C){
 	}
 }
 
-function send_backup(array $C){
+function send_backup(array $C): void
+{
 	global $I, $db;
 	$code=[];
 	if($_POST['do']==='backup'){
@@ -893,7 +968,8 @@ function send_backup(array $C){
 	print_end();
 }
 
-function send_destroy_chat(){
+function send_destroy_chat(): void
+{
 	global $I;
 	print_start('destroy_chat');
 	echo "<table><tr><td colspan=\"2\">$I[confirm]</td></tr><tr><td>";
@@ -902,7 +978,8 @@ function send_destroy_chat(){
 	print_end();
 }
 
-function send_delete_account(){
+function send_delete_account(): void
+{
 	global $I;
 	print_start('delete_account');
 	echo "<table><tr><td colspan=\"2\">$I[confirm]</td></tr><tr><td>";
@@ -911,7 +988,8 @@ function send_delete_account(){
 	print_end();
 }
 
-function send_init(){
+function send_init(): void
+{
 	global $I, $L;
 	print_start('init');
 	echo "<h2>$I[init]</h2>";
@@ -928,14 +1006,16 @@ function send_init(){
 	print_end();
 }
 
-function send_update(string $msg){
+function send_update(string $msg): void
+{
 	global $I;
 	print_start('update');
 	echo "<h2>$I[dbupdate]</h2><br>".form('setup').submit($I['initgosetup'])."</form>$msg<br>".credit();
 	print_end();
 }
 
-function send_alogin(){
+function send_alogin(): void
+{
 	global $I, $L;
 	print_start('alogin');
 	echo form('setup').'<table>';
@@ -952,7 +1032,8 @@ function send_alogin(){
 	print_end();
 }
 
-function send_sa_password_reset(){
+function send_sa_password_reset(): void
+{
 	global $I, $L, $db;
 	print_start('sa_password_reset');
 	echo "<h1>$I[resetpassword]</h1>";
@@ -977,7 +1058,8 @@ function send_sa_password_reset(){
 	print_end();
 }
 
-function send_admin(string $arg){
+function send_admin(string $arg): void
+{
 	global $I, $U, $db;
 	$ga=(int) get_setting('guestaccess');
 	print_start('admin');
@@ -1148,7 +1230,8 @@ function send_admin(string $arg){
 	print_end();
 }
 
-function send_sessions(){
+function send_sessions(): void
+{
 	global $I, $U, $db;
 	$stmt=$db->prepare('SELECT nickname, style, lastpost, status, useragent, ip FROM ' . PREFIX . 'sessions WHERE entry!=0 AND (incognito=0 OR status<? OR nickname=?) ORDER BY status DESC, lastpost DESC;');
 	$stmt->execute([$U['status'], $U['nickname']]);
@@ -1346,20 +1429,21 @@ function get_linkfilters() : array {
 	return $filters;
 }
 
-function send_filter(string $arg=''){
+function send_filter(string $arg=''): void
+{
 	global $I, $U;
 	print_start('filter');
 	echo "<h2>$I[filter]</h2><i>$arg</i><table>";
 	thr();
-	echo '<tr><th><table style="width:100%;"><tr>';
-	echo "<td style=\"width:8em;\">$I[fid]</td>";
-	echo "<td style=\"width:12em;\">$I[match]</td>";
-	echo "<td style=\"width:12em;\">$I[replace]</td>";
-	echo "<td style=\"width:9em;\">$I[allowpm]</td>";
-	echo "<td style=\"width:5em;\">$I[regex]</td>";
-	echo "<td style=\"width:5em;\">$I[kick]</td>";
-	echo "<td style=\"width:5em;\">$I[cs]</td>";
-	echo "<td style=\"width:5em;\">$I[apply]</td>";
+	echo '<tr><th><table><tr>';
+	echo "<td>$I[fid]</td>";
+	echo "<td>$I[match]</td>";
+	echo "<td>$I[replace]</td>";
+	echo "<td>$I[allowpm]</td>";
+	echo "<td>$I[regex]</td>";
+	echo "<td>$I[kick]</td>";
+	echo "<td>$I[cs]</td>";
+	echo "<td>$I[apply]</td>";
 	echo '</tr></table></th></tr>';
 	$filters=get_filters();
 	foreach($filters as $filter){
@@ -1386,41 +1470,42 @@ function send_filter(string $arg=''){
 		}
 		echo '<tr><td>';
 		echo form('admin', 'filter').hidden('id', $filter['id']);
-		echo "<table style=\"width:100%;\"><tr><th style=\"width:8em;\">$I[filter] $filter[id]:</th>";
-		echo "<td style=\"width:12em;\"><input type=\"text\" name=\"match\" value=\"$filter[match]\" size=\"20\" style=\"$U[style]\"></td>";
-		echo '<td style="width:12em;"><input type="text" name="replace" value="'.htmlspecialchars($filter['replace'])."\" size=\"20\" style=\"$U[style]\"></td>";
-		echo "<td style=\"width:9em;\"><label><input type=\"checkbox\" name=\"allowinpm\" value=\"1\"$check>$I[allowpm]</label></td>";
-		echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"regex\" value=\"1\"$checked>$I[regex]</label></td>";
-		echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"kick\" value=\"1\"$checkedk>$I[kick]</label></td>";
-		echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"cs\" value=\"1\"$checkedcs>$I[cs]</label></td>";
-		echo '<td class="filtersubmit" style="width:5em;">'.submit($I['change']).'</td></tr></table></form></td></tr>';
+		echo "<table><tr><td>$I[filter] $filter[id]:</td>";
+		echo "<td><input type=\"text\" name=\"match\" value=\"$filter[match]\" size=\"20\" style=\"$U[style]\"></td>";
+		echo '<td><input type="text" name="replace" value="'.htmlspecialchars($filter['replace'])."\" size=\"20\" style=\"$U[style]\"></td>";
+		echo "<td><label><input type=\"checkbox\" name=\"allowinpm\" value=\"1\"$check>$I[allowpm]</label></td>";
+		echo "<td><label><input type=\"checkbox\" name=\"regex\" value=\"1\"$checked>$I[regex]</label></td>";
+		echo "<td><label><input type=\"checkbox\" name=\"kick\" value=\"1\"$checkedk>$I[kick]</label></td>";
+		echo "<td><label><input type=\"checkbox\" name=\"cs\" value=\"1\"$checkedcs>$I[cs]</label></td>";
+		echo '<td class="filtersubmit">'.submit($I['change']).'</td></tr></table></form></td></tr>';
 	}
 	echo '<tr><td>';
 	echo form('admin', 'filter').hidden('id', '+');
-	echo "<table style=\"width:100%;\"><tr><th style=\"width:8em\">$I[newfilter]</th>";
-	echo "<td style=\"width:12em;\"><input type=\"text\" name=\"match\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
-	echo "<td style=\"width:12em;\"><input type=\"text\" name=\"replace\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
-	echo "<td style=\"width:9em;\"><label><input type=\"checkbox\" name=\"allowinpm\" id=\"allowinpm\" value=\"1\">$I[allowpm]</label></td>";
-	echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"regex\" id=\"regex\" value=\"1\">$I[regex]</label></td>";
-	echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"kick\" id=\"kick\" value=\"1\">$I[kick]</label></td>";
-	echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"cs\" id=\"cs\" value=\"1\">$I[cs]</label></td>";
-	echo '<td class="filtersubmit" style="width:5em;">'.submit($I['add']).'</td></tr></table></form></td></tr>';
+	echo "<table><tr><td>$I[newfilter]</td>";
+	echo "<td><input type=\"text\" name=\"match\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
+	echo "<td><input type=\"text\" name=\"replace\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
+	echo "<td><label><input type=\"checkbox\" name=\"allowinpm\" id=\"allowinpm\" value=\"1\">$I[allowpm]</label></td>";
+	echo "<td><label><input type=\"checkbox\" name=\"regex\" id=\"regex\" value=\"1\">$I[regex]</label></td>";
+	echo "<td><label><input type=\"checkbox\" name=\"kick\" id=\"kick\" value=\"1\">$I[kick]</label></td>";
+	echo "<td><label><input type=\"checkbox\" name=\"cs\" id=\"cs\" value=\"1\">$I[cs]</label></td>";
+	echo '<td class="filtersubmit">'.submit($I['add']).'</td></tr></table></form></td></tr>';
 	echo "</table><br>";
 	echo form('admin', 'filter').submit($I['reload']).'</form>';
 	print_end();
 }
 
-function send_linkfilter(string $arg=''){
+function send_linkfilter(string $arg=''): void
+{
 	global $I, $U;
 	print_start('linkfilter');
 	echo "<h2>$I[linkfilter]</h2><i>$arg</i><table>";
 	thr();
-	echo '<tr><th><table style="width:100%;"><tr>';
-	echo "<td style=\"width:8em;\">$I[fid]</td>";
-	echo "<td style=\"width:12em;\">$I[match]</td>";
-	echo "<td style=\"width:12em;\">$I[replace]</td>";
-	echo "<td style=\"width:5em;\">$I[regex]</td>";
-	echo "<td style=\"width:5em;\">$I[apply]</td>";
+	echo '<tr><th><table><tr>';
+	echo "<td>$I[fid]</td>";
+	echo "<td>$I[match]</td>";
+	echo "<td>$I[replace]</td>";
+	echo "<td>$I[regex]</td>";
+	echo "<td>$I[apply]</td>";
 	echo '</tr></table></th></tr>';
 	$filters=get_linkfilters();
 	foreach($filters as $filter){
@@ -1432,31 +1517,32 @@ function send_linkfilter(string $arg=''){
 		}
 		echo '<tr><td>';
 		echo form('admin', 'linkfilter').hidden('id', $filter['id']);
-		echo "<table style=\"width:100%;\"><tr><th style=\"width:8em;\">$I[filter] $filter[id]:</th>";
-		echo "<td style=\"width:12em;\"><input type=\"text\" name=\"match\" value=\"$filter[match]\" size=\"20\" style=\"$U[style]\"></td>";
-		echo '<td style="width:12em;"><input type="text" name="replace" value="'.htmlspecialchars($filter['replace'])."\" size=\"20\" style=\"$U[style]\"></td>";
-		echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"regex\" value=\"1\"$checked>$I[regex]</label></td>";
-		echo '<td class="filtersubmit" style="width:5em;">'.submit($I['change']).'</td></tr></table></form></td></tr>';
+		echo "<table><tr><td>$I[filter] $filter[id]:</td>";
+		echo "<td><input type=\"text\" name=\"match\" value=\"$filter[match]\" size=\"20\" style=\"$U[style]\"></td>";
+		echo '<td><input type="text" name="replace" value="'.htmlspecialchars($filter['replace'])."\" size=\"20\" style=\"$U[style]\"></td>";
+		echo "<td><label><input type=\"checkbox\" name=\"regex\" value=\"1\"$checked>$I[regex]</label></td>";
+		echo '<td class="filtersubmit">'.submit($I['change']).'</td></tr></table></form></td></tr>';
 	}
 	echo '<tr><td>';
 	echo form('admin', 'linkfilter').hidden('id', '+');
-	echo "<table style=\"width:100%;\"><tr><th style=\"width:8em;\">$I[newfilter]</th>";
-	echo "<td style=\"width:12em;\"><input type=\"text\" name=\"match\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
-	echo "<td style=\"width:12em;\"><input type=\"text\" name=\"replace\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
-	echo "<td style=\"width:5em;\"><label><input type=\"checkbox\" name=\"regex\" value=\"1\">$I[regex]</label></td>";
-	echo '<td class="filtersubmit" style="width:5em;">'.submit($I['add']).'</td></tr></table></form></td></tr>';
+	echo "<table><tr><td>$I[newfilter]</td>";
+	echo "<td><input type=\"text\" name=\"match\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
+	echo "<td><input type=\"text\" name=\"replace\" value=\"\" size=\"20\" style=\"$U[style]\"></td>";
+	echo "<td><label><input type=\"checkbox\" name=\"regex\" value=\"1\">$I[regex]</label></td>";
+	echo '<td class="filtersubmit">'.submit($I['add']).'</td></tr></table></form></td></tr>';
 	echo "</table><br>";
 	echo form('admin', 'linkfilter').submit($I['reload']).'</form>';
 	print_end();
 }
 
-function send_frameset(){
+function send_frameset(): void
+{
 	global $U, $db, $language;
-	prepare_stylesheets();
+	prepare_stylesheets('frameset');
 	send_headers();
 	echo '<!DOCTYPE html><html lang="'.$language.'"><head>'.meta_html();
 	echo '<title>'.get_setting('chatname').'</title>';
-	print_stylesheet();
+	print_stylesheet('frameset');
 	echo '</head><body>';
 	if(isset($_POST['sort'])){
 		if($_POST['sort']==1){
@@ -1474,11 +1560,6 @@ function send_frameset(){
 			$stmt->execute([$U['sortupdown'], $U['nocache'], $U['nocache_old'], $U['nickname']]);
 		}
 	}
-	if(($U['status']>=5 || ($U['status']>2 && get_count_mods()==0)) && get_setting('enfileupload')>0 && get_setting('enfileupload')<=$U['status']){
-		$postheight='120px';
-	}else{
-		$postheight='100px';
-	}
 	$bottom='';
 	if(get_setting('enablegreeting')){
 		$action_mid='greeting';
@@ -1492,20 +1573,14 @@ function send_frameset(){
 		$action_top='post';
 		$action_bot='controls';
 		$sort_bot='&sort=1';
-		$frameset_mid_style="position:fixed;top:$postheight;bottom:45px;left:0;right:0;margin:0;padding:0;overflow:hidden;";
-		$frameset_top_style="position:fixed;top:0;left:0;right:0;height:$postheight;margin:0;padding:0;overflow:hidden;border-bottom: 1px solid;";
-		$frameset_bot_style="position:fixed;bottom:0;left:0;right:0;height:45px;margin:0;padding:0;overflow:hidden;border-top:1px solid;";
 	}else{
 		$action_top='controls';
 		$action_bot='post';
 		$sort_bot='';
-		$frameset_mid_style="position:fixed;top:45px;bottom:$postheight;left:0;right:0;margin:0;padding:0;overflow:hidden;";
-		$frameset_top_style="position:fixed;top:0;left:0;right:0;height:45px;margin:0;padding:0;overflow:hidden;border-bottom:1px solid;";
-		$frameset_bot_style="position:fixed;bottom:0;left:0;right:0;height:$postheight;margin:0;padding:0;overflow:hidden;border-top:1px solid;";
-	}
-	echo "<div id=\"frameset-mid\" style=\"$frameset_mid_style\"><iframe name=\"view\" src=\"$_SERVER[SCRIPT_NAME]?action=$action_mid&session=$U[session]&lang=$language$bottom\">".noframe_html()."</iframe></div>";
-	echo "<div id=\"frameset-top\" style=\"$frameset_top_style\"><iframe name=\"$action_top\" src=\"$_SERVER[SCRIPT_NAME]?action=$action_top&session=$U[session]&lang=$language\">".noframe_html()."</iframe></div>";
-	echo "<div id=\"frameset-bot\" style=\"$frameset_bot_style\"><iframe name=\"$action_bot\" src=\"$_SERVER[SCRIPT_NAME]?action=$action_bot&session=$U[session]&lang=$language$sort_bot\">".noframe_html()."</iframe></div>";
+		}
+	echo "<div id=\"frameset-mid\"><iframe name=\"view\" src=\"$_SERVER[SCRIPT_NAME]?action=$action_mid&session=$U[session]&lang=$language$bottom\">".noframe_html()."</iframe></div>";
+	echo "<div id=\"frameset-top\"><iframe name=\"$action_top\" src=\"$_SERVER[SCRIPT_NAME]?action=$action_top&session=$U[session]&lang=$language\">".noframe_html()."</iframe></div>";
+	echo "<div id=\"frameset-bot\"><iframe name=\"$action_bot\" src=\"$_SERVER[SCRIPT_NAME]?action=$action_bot&session=$U[session]&lang=$language$sort_bot\">".noframe_html()."</iframe></div>";
 	echo '</body></html>';
 	exit;
 }
@@ -1515,7 +1590,8 @@ function noframe_html() : string {
 	return "$I[noframes]".form_target('_parent', '').submit($I['backtologin'], 'class="backbutton"').'</form>';
 }
 
-function send_messages(){
+function send_messages(): void
+{
 	global $I, $U, $language;
 	if($U['nocache']){
 		$nocache='&nc='.substr(time(), -6);
@@ -1550,7 +1626,8 @@ function send_messages(){
 	print_end();
 }
 
-function send_inbox(){
+function send_inbox(): void
+{
 	global $I, $U, $db;
 	print_start('inbox');
 	echo form('inbox', 'clean').submit($I['delselmes'], 'class="delbutton"').'<br><br>';
@@ -1584,7 +1661,8 @@ function send_inbox(){
 	print_end();
 }
 
-function send_notes(int $type){
+function send_notes(int $type): void
+{
 	global $I, $U, $db;
 	print_start('notes');
 	$personalnotes=(bool) get_setting('personalnotes');
@@ -1682,7 +1760,8 @@ function send_notes(int $type){
 	print_end();
 }
 
-function send_approve_waiting(){
+function send_approve_waiting(): void
+{
 	global $I, $db;
 	print_start('approve_waiting');
 	echo "<h2>$I[waitingroom]</h2>";
@@ -1709,7 +1788,8 @@ function send_approve_waiting(){
 	print_end();
 }
 
-function send_waiting_room(){
+function send_waiting_room(): void
+{
 	global $I, $U, $db, $language;
 	$ga=(int) get_setting('guestaccess');
 	if($ga===3 && (get_count_mods()>0 || !get_setting('modfallback'))){
@@ -1751,7 +1831,8 @@ function send_waiting_room(){
 	}
 }
 
-function send_choose_messages(){
+function send_choose_messages(): void
+{
 	global $I, $U;
 	print_start('choose_messages');
 	echo form('admin', 'clean');
@@ -1761,7 +1842,8 @@ function send_choose_messages(){
 	print_end();
 }
 
-function send_del_confirm(){
+function send_del_confirm(): void
+{
 	global $I;
 	print_start('del_confirm');
 	echo "<table><tr><td colspan=\"2\">$I[confirm]</td></tr><tr><td>".form('delete');
@@ -1782,7 +1864,8 @@ function send_del_confirm(){
 	print_end();
 }
 
-function send_post(string $rejected=''){
+function send_post(string $rejected=''): void
+{
 	global $I, $U, $db;
 	print_start('post');
 	if(!isset($_REQUEST['sendto'])){
@@ -1869,7 +1952,7 @@ function send_post(string $rejected=''){
 		echo hidden('multi', 'on');
 	}
 	echo hidden('sendto', htmlspecialchars($_REQUEST['sendto'])).hidden('what', 'all');
-	echo submit($I['delall'], 'class="delbutton"').'</form></td><td style="width:10px;"></td><td>'.form('post');
+	echo submit($I['delall'], 'class="delbutton"').'</form></td><td class="spacer"></td><td>'.form('post');
 	if(isset($_POST['multi'])){
 		echo submit($I['switchsingle']);
 	}else{
@@ -1880,7 +1963,8 @@ function send_post(string $rejected=''){
 	print_end();
 }
 
-function send_greeting(){
+function send_greeting(): void
+{
 	global $I, $U, $language;
 	print_start('greeting', (int) $U['refresh'], "$_SERVER[SCRIPT_NAME]?action=view&session=$U[session]&lang=$language");
 	printf("<h1>$I[greetingmsg]</h1>", style_this(htmlspecialchars($U['nickname']), $U['style']));
@@ -1892,7 +1976,8 @@ function send_greeting(){
 	print_end();
 }
 
-function send_help(){
+function send_help(): void
+{
 	global $I, $U;
 	print_start('help');
 	$rulestxt=get_setting('rulestxt');
@@ -1916,7 +2001,8 @@ function send_help(){
 	print_end();
 }
 
-function view_publicnotes(){
+function view_publicnotes(): void
+{
 	global $I, $db;
 	$dateformat = get_setting('dateformat');
 	print_start('publicnotes');
@@ -1941,7 +2027,8 @@ function view_publicnotes(){
 	print_end();
 }
 
-function send_profile(string $arg=''){
+function send_profile(string $arg=''): void
+{
 	global $I, $L, $U, $db, $language;
 	print_start('profile');
 	echo form('profile', 'save')."<h2>$I[profile]</h2><i>$arg</i><table>";
@@ -1970,8 +2057,10 @@ function send_profile(string $arg=''){
 	}
 	echo '</select></td></tr></table></td></tr>';
 	thr();
-	echo "<tr><td><table id=\"refresh\"><tr><th>$I[refreshrate]</th><td>";
-	echo "<input type=\"number\" name=\"refresh\" size=\"3\" maxlength=\"3\" min=\"5\" max=\"150\" value=\"$U[refresh]\"></td></tr></table></td></tr>";
+	$max_refresh_rate = get_setting('max_refresh_rate');
+	$min_refresh_rate = get_setting('min_refresh_rate');
+	echo '<tr><td><table id="refresh"><tr><th>'.sprintf($I['refreshrate'], $min_refresh_rate, $max_refresh_rate).'</th><td>';
+	echo '<input type="number" name="refresh" size="3" min="'.$min_refresh_rate.'" max="'.$max_refresh_rate.'" value="'.$U['refresh'].'"></td></tr></table></td></tr>';
 	thr();
 	preg_match('/#([0-9a-f]{6})/i', $U['style'], $matches);
 	echo "<tr><td><table id=\"colour\"><tr><th>$I[fontcolour] (<a href=\"$_SERVER[SCRIPT_NAME]?action=colours&amp;session=$U[session]&amp;lang=$language\" target=\"view\">$I[viewexample]</a>)</th><td>";
@@ -2087,18 +2176,35 @@ function send_profile(string $arg=''){
 	print_end();
 }
 
-function send_controls(){
+function send_controls(): void
+{
 	global $I, $U;
 	print_start('controls');
 	$personalnotes=(bool) get_setting('personalnotes');
 	$publicnotes=(bool) get_setting('publicnotes');
+	$hide_reload_post_box=(bool) get_setting('hide_reload_post_box');
+	$hide_reload_messages=(bool) get_setting('hide_reload_messages');
+	$hide_profile=(bool) get_setting('hide_profile');
+	$hide_admin=(bool) get_setting('hide_admin');
+	$hide_notes=(bool) get_setting('hide_notes');
+	$hide_clone=(bool) get_setting('hide_clone');
+	$hide_rearrange=(bool) get_setting('hide_rearrange');
+	$hide_help=(bool) get_setting('hide_help');
 	echo '<table><tr>';
-	echo '<td>'.form_target('post', 'post').submit($I['reloadpb']).'</form></td>';
-	echo '<td>'.form_target('view', 'view').submit($I['reloadmsgs']).'</form></td>';
-	echo '<td>'.form_target('view', 'profile').submit($I['chgprofile']).'</form></td>';
+	if(!$hide_reload_post_box) {
+		echo '<td>' . form_target( 'post', 'post' ) . submit( $I[ 'reloadpb' ] ) . '</form></td>';
+	}
+	if(!$hide_reload_messages) {
+		echo '<td>' . form_target( 'view', 'view' ) . submit( $I[ 'reloadmsgs' ] ) . '</form></td>';
+	}
+	if(!$hide_profile) {
+		echo '<td>' . form_target( 'view', 'profile' ) . submit( $I[ 'chgprofile' ] ) . '</form></td>';
+	}
 	if($U['status']>=5){
-		echo '<td>'.form_target('view', 'admin').submit($I['adminbtn']).'</form></td>';
-		if(!$personalnotes){
+		if(!$hide_admin) {
+			echo '<td>' . form_target( 'view', 'admin' ) . submit( $I[ 'adminbtn' ] ) . '</form></td>';
+		}
+		if(!$personalnotes && !$hide_notes){
 			echo '<td>'.form_target('view', 'notes', 'staff').submit($I['notes']).'</form></td>';
 		}
 	}
@@ -2109,21 +2215,28 @@ function send_controls(){
 		if($personalnotes || $publicnotes){
 			echo '<td>'.form_target('view', 'notes').submit($I['notes']).'</form></td>';
 		}
-		echo '<td>'.form_target('_blank', 'login').submit($I['clone']).'</form></td>';
+		if(!$hide_clone) {
+			echo '<td>' . form_target( '_blank', 'login' ) . submit( $I[ 'clone' ] ) . '</form></td>';
+		}
 	}
 	if(!isset($_GET['sort'])){
 		$sort=0;
 	}else{
 		$sort=1;
 	}
-	echo '<td>'.form_target('_parent', 'login').hidden('sort', $sort).submit($I['sortframe']).'</form></td>';
-	echo '<td>'.form_target('view', 'help').submit($I['randh']).'</form></td>';
+	if(!$hide_rearrange) {
+		echo '<td>' . form_target( '_parent', 'login' ) . hidden( 'sort', $sort ) . submit( $I[ 'sortframe' ] ) . '</form></td>';
+	}
+	if(!$hide_help) {
+		echo '<td>' . form_target( 'view', 'help' ) . submit( $I[ 'randh' ] ) . '</form></td>';
+	}
 	echo '<td>'.form_target('_parent', 'logout').submit($I['exit'], 'id="exitbutton"').'</form></td>';
 	echo '</tr></table>';
 	print_end();
 }
 
-function send_download(){
+function send_download(): void
+{
 	global $I, $db;
 	if(isset($_GET['id'])){
 		$stmt=$db->prepare('SELECT filename, type, data FROM ' . PREFIX . 'files WHERE hash=?;');
@@ -2144,14 +2257,16 @@ function send_download(){
 	}
 }
 
-function send_logout(){
+function send_logout(): void
+{
 	global $I, $U;
 	print_start('logout');
 	echo '<h1>'.sprintf($I['bye'], style_this(htmlspecialchars($U['nickname']), $U['style'])).'</h1>'.form_target('_parent', '').submit($I['backtologin'], 'class="backbutton"').'</form>';
 	print_end();
 }
 
-function send_colours(){
+function send_colours(): void
+{
 	global $I;
 	print_start('colours');
 	echo "<h2>$I[colourtable]</h2><kbd><b>";
@@ -2169,7 +2284,8 @@ function send_colours(){
 	print_end();
 }
 
-function send_login(){
+function send_login(): void
+{
 	global $I, $L;
 	$ga=(int) get_setting('guestaccess');
 	if($ga===4){
@@ -2224,22 +2340,25 @@ function send_login(){
 	print_end();
 }
 
-function send_chat_disabled(){
+function send_chat_disabled(): void
+{
 	print_start('disabled');
 	echo get_setting('disabletext');
 	print_end();
 }
 
-function send_error(string $err){
+function send_error(string $err): void
+{
 	global $I;
 	print_start('error');
 	echo "<h2>$I[error]: $err</h2>".form_target('_parent', '').submit($I['backtologin'], 'class="backbutton"').'</form>';
 	print_end();
 }
 
-function send_fatal_error(string $err){
+function send_fatal_error(string $err): void
+{
 	global $I, $language, $styles;
-	prepare_stylesheets();
+	prepare_stylesheets('fatal_error');
 	send_headers();
 	echo '<!DOCTYPE html><html lang="'.$language.'"><head>'.meta_html();
 	echo "<title>$I[fatalerror]</title>";
@@ -2249,7 +2368,8 @@ function send_fatal_error(string $err){
 	print_end();
 }
 
-function print_notifications(){
+function print_notifications(): void
+{
 	global $I, $U, $db;
 	echo '<span id="notifications">';
 	$stmt=$db->prepare('SELECT loginfails FROM ' . PREFIX . 'members WHERE nickname=?;');
@@ -2278,7 +2398,8 @@ function print_notifications(){
 	echo '</span>';
 }
 
-function print_chatters(){
+function print_chatters(): void
+{
 	global $I, $U, $db, $language;
 	if(!$U['hidechatters']){
 		echo '<div id="chatters"><table><tr>';
@@ -2286,8 +2407,8 @@ function print_chatters(){
 		$stmt->execute([$U['nickname'], $U['nickname']]);
 		$nc=substr(time(), -6);
 		$G=$M=$S=$A=[];
-		$channellink="<a style=\"text-decoration:underline\" href=\"$_SERVER[SCRIPT_NAME]?action=post&amp;session=$U[session]&amp;lang=$language&amp;nc=$nc&amp;sendto=";
-		$nicklink="<a style=\"text-decoration:none\" href=\"$_SERVER[SCRIPT_NAME]?action=post&amp;session=$U[session]&amp;lang=$language&amp;nc=$nc&amp;sendto=";
+		$channellink="<a class=\"channellink\" href=\"$_SERVER[SCRIPT_NAME]?action=post&amp;session=$U[session]&amp;lang=$language&amp;nc=$nc&amp;sendto=";
+		$nicklink="<a class=\"nicklink\" href=\"$_SERVER[SCRIPT_NAME]?action=post&amp;session=$U[session]&amp;lang=$language&amp;nc=$nc&amp;sendto=";
 		while($user=$stmt->fetch(PDO::FETCH_NUM)){
 			$link=$nicklink.urlencode($user[0]).'" target="post">'.style_this(htmlspecialchars($user[0]), $user[1]).'</a>';
 			if($user[2]<3){ // guest or superguest
@@ -2306,23 +2427,24 @@ function print_chatters(){
 				echo "<th>$I[admin]:</th><td>&nbsp;</td><td>".implode(' &nbsp; ', $A).'</td>';
 		}
 		if($U['status']>4){ // can chat in staff channel
-				echo '<th><br/>' . $channellink . 's &#37;" target="post">' . $I['staff'] . ':</a></th><td>&nbsp;</td><td>'.implode(' &nbsp; ', $S).'</td>';
+				echo '<th>' . $channellink . 's &#37;" target="post">' . $I['staff'] . ':</a></th><td>&nbsp;</td><td>'.implode(' &nbsp; ', $S).'</td>';
 			} else {
-				echo "<th><br/>$I[staff]:</th><td>&nbsp;</td><td>".implode(' &nbsp; ', $S).'</td>';
+				echo "<th>$I[staff]:</th><td>&nbsp;</td><td>".implode(' &nbsp; ', $S).'</td>';
 		}
 		if($U['status']>=3){ // can chat in member channel
-			echo '<th>' . $channellink . 's ?" target="post"><br/>' . $I['members'] . ':</a></th><td>&nbsp;</td><td class="chattername">'.implode(' &nbsp; ', $M).'</td>';
+			echo '<th>' . $channellink . 's ?" target="post">' . $I['members'] . ':</a></th><td>&nbsp;</td><td class="chattername">'.implode(' &nbsp; ', $M).'</td>';
 		} else {
-			echo "<th><br/>$I[members]:</th><td>&nbsp;</td><td>".implode(' &nbsp; ', $M).'</td>';
+			echo "<th>$I[members]:</th><td>&nbsp;</td><td>".implode(' &nbsp; ', $M).'</td>';
 		}
-		echo '<th>' . $channellink . 's *" target="post"><br/>' . $I['guests'] . ':</a></th><td>&nbsp;</td><td class="chattername">'.implode(' &nbsp; ', $G).'</td>';
+		echo '<th>' . $channellink . 's *" target="post">' . $I['guests'] . ':</a></th><td>&nbsp;</td><td class="chattername">'.implode(' &nbsp; ', $G).'</td>';
 		echo '</tr></table></div>';
 	}
 }
 
 //  session management
 
-function create_session(bool $setup, string $nickname, string $password){
+function create_session(bool $setup, string $nickname, string $password): void
+{
 	global $I, $U;
 	$U['nickname']=preg_replace('/\s/', '', $nickname);
 	if(check_member($password)){
@@ -2357,7 +2479,8 @@ function create_session(bool $setup, string $nickname, string $password){
 	write_new_session($password);
 }
 
-function check_captcha(string $challenge, string $captcha_code){
+function check_captcha(string $challenge, string $captcha_code): void
+{
 	global $I, $db, $memcached;
 	$captcha=(int) get_setting('captcha');
 	if($captcha!==0){
@@ -2402,7 +2525,8 @@ function is_definitely_ssl() : bool {
 	return false;
 }
 
-function set_secure_cookie(string $name, string $value){
+function set_secure_cookie(string $name, string $value): void
+{
 	if (version_compare(PHP_VERSION, '7.3.0') >= 0) {
 		setcookie($name, $value, ['expires' => 0, 'path' => '/', 'domain' => '', 'secure' => is_definitely_ssl(), 'httponly' => true, 'samesite' => 'Strict']);
 	}else{
@@ -2410,7 +2534,8 @@ function set_secure_cookie(string $name, string $value){
 	}
 }
 
-function write_new_session(string $password){
+function write_new_session(string $password): void
+{
 	global $I, $U, $db, $session;
 	$stmt=$db->prepare('SELECT * FROM ' . PREFIX . 'sessions WHERE nickname=?;');
 	$stmt->execute([$U['nickname']]);
@@ -2454,7 +2579,8 @@ function write_new_session(string $password){
 	}
 }
 
-function show_fails() {
+function show_fails(): void
+{
 	global $db, $I, $U;
 	$stmt=$db->prepare('SELECT loginfails FROM ' . PREFIX . 'members WHERE nickname=?;');
 	$stmt->execute([$U['nickname']]);
@@ -2469,7 +2595,8 @@ function show_fails() {
 	}
 }
 
-function approve_session(){
+function approve_session(): void
+{
 	global $db;
 	if(isset($_POST['what'])){
 		if($_POST['what']==='allowchecked' && isset($_POST['csid'])){
@@ -2498,7 +2625,8 @@ function approve_session(){
 	}
 }
 
-function check_login(){
+function check_login(): void
+{
 	global $I, $U;
 	$ga=(int) get_setting('guestaccess');
 	parse_sessions();
@@ -2534,7 +2662,8 @@ function check_login(){
 	}
 }
 
-function kill_session(){
+function kill_session(): void
+{
 	global $U, $db, $session;
 	parse_sessions();
 	check_expired();
@@ -2591,7 +2720,8 @@ function kick_chatter(array $names, string $mes, bool $purge) : bool {
 	return false;
 }
 
-function logout_chatter(array $names){
+function logout_chatter(array $names): void
+{
 	global $U, $db;
 	$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'sessions WHERE nickname=? AND status<?;');
 	if($names[0]==='s _'){
@@ -2606,7 +2736,8 @@ function logout_chatter(array $names){
 	}
 }
 
-function check_session(){
+function check_session(): void
+{
 	global $U;
 	parse_sessions();
 	check_expired();
@@ -2616,7 +2747,8 @@ function check_session(){
 	}
 }
 
-function check_expired(){
+function check_expired(): void
+{
 	global $I, $U, $session;
 	if(!isset($U['session'])){
 		setcookie(COOKIENAME, false);
@@ -2631,7 +2763,8 @@ function get_count_mods() : int {
 	return (int) $c[0];
 }
 
-function check_kicked(){
+function check_kicked(): void
+{
 	global $I, $U, $session;
 	if($U['status']==0){
 		setcookie(COOKIENAME, false);
@@ -2640,7 +2773,8 @@ function check_kicked(){
 	}
 }
 
-function get_nowchatting(){
+function get_nowchatting(): void
+{
 	global $I, $db;
 	parse_sessions();
 	$stmt=$db->query('SELECT COUNT(*) FROM ' . PREFIX . 'sessions WHERE entry!=0 AND status>0 AND incognito=0;');
@@ -2655,7 +2789,8 @@ function get_nowchatting(){
 	echo '</div>';
 }
 
-function parse_sessions(){
+function parse_sessions(): void
+{
 	global $U, $db, $session;
 	// look for our session
 	if(!empty($session)){
@@ -2698,7 +2833,8 @@ function check_member(string $password) : bool {
 	return false;
 }
 
-function delete_account(){
+function delete_account(): void
+{
 	global $U, $db;
 	if($U['status']<8){
 		$stmt=$db->prepare('UPDATE ' . PREFIX . 'sessions SET status=1, incognito=0 WHERE nickname=?;');
@@ -2837,7 +2973,8 @@ function passreset(string $nick, string $pass) : string {
 	}
 }
 
-function amend_profile(){
+function amend_profile(): void
+{
 	global $U;
 	if(isset($_POST['refresh'])){
 		$U['refresh']=$_POST['refresh'];
@@ -2989,7 +3126,8 @@ function set_new_nickname() : string {
 }
 
 //sets default settings for guests
-function add_user_defaults(string $password){
+function add_user_defaults(string $password): void
+{
 	global $U;
 	$U['refresh']=get_setting('defaultrefresh');
 	$U['bgcolour']=get_setting('colbg');
@@ -3302,7 +3440,8 @@ function add_message(string $message, string $recipient, string $poster, int $de
 	return true;
 }
 
-function add_system_message(string $mes, string $doer){
+function add_system_message(string $mes, string $doer): void
+{
 	if($mes===''){
 		return;
 	}
@@ -3329,7 +3468,8 @@ function add_system_message(string $mes, string $doer){
 	write_message($sysmessage);
 }
 
-function write_message($message){
+function write_message(array $message): void
+{
 	global $db;
 	if(MSGENCRYPTED){
 		try {
@@ -3348,13 +3488,15 @@ function write_message($message){
 	}
 }
 
-function clean_room(){
+function clean_room(): void
+{
 	global $U, $db;
 	$db->query('DELETE FROM ' . PREFIX . 'messages;');
 	add_system_message(sprintf(get_setting('msgclean'), get_setting('chatname')), $U['nickname']);
 }
 
-function clean_selected(int $status, string $nick){
+function clean_selected(int $status, string $nick): void
+{
 	global $db;
 	if(isset($_POST['mid'])){
 		$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'messages WHERE id=? AND (poster=? OR recipient=? OR (poststatus<? AND delstatus<?));');
@@ -3364,7 +3506,8 @@ function clean_selected(int $status, string $nick){
 	}
 }
 
-function clean_inbox_selected(){
+function clean_inbox_selected(): void
+{
 	global $U, $db;
 	if(isset($_POST['mid'])){
 		$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'inbox WHERE id=? AND recipient=?;');
@@ -3374,35 +3517,50 @@ function clean_inbox_selected(){
 	}
 }
 
-function del_all_messages(string $nick, int $entry){
-	global $db;
-	if($nick==''){
-		return;
+function del_all_messages(string $nick, int $entry): void
+{
+	global $db, $U;
+	$globally = (bool) get_setting('postbox_delete_globally');
+	if($globally && $U['status'] > 4){
+		$stmt = $db->prepare( 'DELETE FROM ' . PREFIX . 'messages;' );
+		$stmt->execute();
+	} else {
+		if ( $nick === '' ) {
+			$nick = $U[ 'nickname' ];
+		}
+		$stmt = $db->prepare( 'DELETE FROM ' . PREFIX . 'messages WHERE poster=? AND postdate>=?;' );
+		$stmt->execute( [ $nick, $entry ] );
+		$stmt = $db->prepare( 'DELETE FROM ' . PREFIX . 'inbox WHERE poster=? AND postdate>=?;' );
+		$stmt->execute( [ $nick, $entry ] );
 	}
-	$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'messages WHERE poster=? AND postdate>=?;');
-	$stmt->execute([$nick, $entry]);
-	$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'inbox WHERE poster=? AND postdate>=?;');
-	$stmt->execute([$nick, $entry]);
 }
 
-function del_last_message(){
+function del_last_message(): void
+{
 	global $U, $db;
 	if($U['status']>1){
 		$entry=0;
 	}else{
 		$entry=$U['entry'];
 	}
-	$stmt=$db->prepare('SELECT id FROM ' . PREFIX . 'messages WHERE poster=? AND postdate>=? ORDER BY id DESC LIMIT 1;');
-	$stmt->execute([$U['nickname'], $entry]);
-	if($id=$stmt->fetch(PDO::FETCH_NUM)){
-		$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'messages WHERE id=?;');
-		$stmt->execute($id);
-		$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'inbox WHERE postid=?;');
-		$stmt->execute($id);
+	$globally = (bool) get_setting('postbox_delete_globally');
+	if($globally && $U['status'] > 4) {
+		$stmt = $db->prepare( 'SELECT id FROM ' . PREFIX . 'messages WHERE postdate>=? ORDER BY id DESC LIMIT 1;' );
+		$stmt->execute( [ $entry ] );
+	} else {
+		$stmt = $db->prepare( 'SELECT id FROM ' . PREFIX . 'messages WHERE poster=? AND postdate>=? ORDER BY id DESC LIMIT 1;' );
+		$stmt->execute( [ $U[ 'nickname' ], $entry ] );
+	}
+	if ( $id = $stmt->fetch( PDO::FETCH_NUM ) ) {
+		$stmt = $db->prepare( 'DELETE FROM ' . PREFIX . 'messages WHERE id=?;' );
+		$stmt->execute( $id );
+		$stmt = $db->prepare( 'DELETE FROM ' . PREFIX . 'inbox WHERE postid=?;' );
+		$stmt->execute( $id );
 	}
 }
 
-function print_messages(int $delstatus=0){
+function print_messages(int $delstatus=0): void
+{
 	global $I, $U, $db;
 	$dateformat=get_setting('dateformat');
 	if(!$U['embed'] && get_setting('imgembed')){
@@ -3459,7 +3617,8 @@ function print_messages(int $delstatus=0){
 	echo '</div>';
 }
 
-function prepare_message_print(array &$message, bool $removeEmbed){
+function prepare_message_print(array &$message, bool $removeEmbed): void
+{
 	if(MSGENCRYPTED){
 		try {
 			$message['text']=sodium_crypto_aead_aes256gcm_decrypt(base64_decode($message['text']), null, AES_IV, ENCRYPTKEY);
@@ -3478,8 +3637,9 @@ function prepare_message_print(array &$message, bool $removeEmbed){
 
 // this and that
 
-function send_headers(){
-	global $U, $styles;
+function send_headers(): void
+{
+	global $U, $scripts, $styles;
 	header('Content-Type: text/html; charset=UTF-8');
 	header('Pragma: no-cache');
 	header('Cache-Control: no-cache, no-store, must-revalidate, max-age=0, private');
@@ -3495,7 +3655,11 @@ function send_headers(){
 	foreach($styles as $style) {
 		$style_hashes .= " 'sha256-".base64_encode(hash('sha256', $style, true))."'";
 	}
-	header("Content-Security-Policy: base-uri 'self'; default-src 'none'; font-src 'self'; form-action 'self'; frame-ancestors 'self'; frame-src 'self'; img-src * data:; media-src * data:; style-src 'self' 'unsafe-inline'"); // $style_hashes"); //we can add computed hashes as soon as all inline css is moved to default css
+	$script_hashes = '';
+	foreach($scripts as $script) {
+		$script_hashes .= " 'sha256-".base64_encode(hash('sha256', $script, true))."'";
+	}
+	header("Content-Security-Policy: base-uri 'self'; default-src 'none'; font-src 'self'; form-action 'self'; frame-ancestors 'self'; frame-src 'self'; img-src * data:; media-src * data:; style-src 'self' 'unsafe-inline';" . (empty($script_hashes) ? '' : " script-src $script_hashes;")); // $style_hashes"); //we can add computed hashes as soon as all inline css is moved to default css
 	header('X-Content-Type-Options: nosniff');
 	header('X-Frame-Options: sameorigin');
 	header('X-XSS-Protection: 1; mode=block');
@@ -3504,7 +3668,8 @@ function send_headers(){
 	}
 }
 
-function save_setup(array $C){
+function save_setup(array $C): void
+{
 	global $db;
 	//sanity checks and escaping
 	foreach($C['msg_settings'] as $setting){
@@ -3545,10 +3710,12 @@ function save_setup(array $C){
 	if($_POST['captchatime']<30){
 		$_POST['memberexpire']=30;
 	}
-	if($_POST['defaultrefresh']<5){
-		$_POST['defaultrefresh']=5;
-	}elseif($_POST['defaultrefresh']>150){
-		$_POST['defaultrefresh']=150;
+	$max_refresh_rate = (int) get_setting('max_refresh_rate');
+	$min_refresh_rate = (int) get_setting('min_refresh_rate');
+	if($_POST['defaultrefresh']<$min_refresh_rate){
+		$_POST['defaultrefresh']=$min_refresh_rate;
+	}elseif($_POST['defaultrefresh']>$max_refresh_rate){
+		$_POST['defaultrefresh']=$max_refresh_rate;
 	}
 	if($_POST['maxname']<1){
 		$_POST['maxname']=1;
@@ -3577,7 +3744,8 @@ function save_setup(array $C){
 	}
 }
 
-function set_default_tz(){
+function set_default_tz(): void
+{
 	global $U;
 	if(isset($U['tz'])){
 		date_default_timezone_set($U['tz']);
@@ -3621,7 +3789,8 @@ function valid_regex(string &$regex) : bool {
 	return (@preg_match("/$_POST[match]/u", '') !== false);
 }
 
-function get_timeout(int $lastpost, int $expire){
+function get_timeout(int $lastpost, int $expire): void
+{
 	$s=($lastpost+60*$expire)-time();
 	$m=floor($s/60);
 	$s%=60;
@@ -3640,7 +3809,8 @@ function get_timeout(int $lastpost, int $expire){
 	}
 }
 
-function print_colours(){
+function print_colours(): void
+{
 	global $I;
 	// Prints a short list with selected named HTML colours and filters out illegible text colours for the given background.
 	// It's a simple comparison of weighted grey values. This is not very accurate but gets the job done well enough.
@@ -3673,7 +3843,8 @@ function check_init() : bool {
 }
 
 // run every minute doing various database cleanup task
-function cron(){
+function cron(): void
+{
 	global $db;
 	$time=time();
 	if(get_setting('nextcron')>$time){
@@ -3738,7 +3909,8 @@ function cron(){
 	$db->query('DELETE FROM ' . PREFIX . 'notes WHERE (type=2 OR type=3) AND editedby NOT IN (SELECT nickname FROM ' . PREFIX . 'members);');
 }
 
-function destroy_chat(array $C){
+function destroy_chat(array $C): void
+{
 	global $I, $db, $memcached, $session;
 	setcookie(COOKIENAME, false);
 	$session = '';
@@ -3769,9 +3941,9 @@ function destroy_chat(array $C){
 	print_end();
 }
 
-function init_chat(){
+function init_chat(): void
+{
 	global $I, $db;
-	$suwrite='';
 	if(check_init()){
 		$suwrite=$I['initdbexist'];
 		$result=$db->query('SELECT null FROM ' . PREFIX . 'members WHERE status=8;');
@@ -3907,6 +4079,18 @@ function init_chat(){
 			['filtermodkick', '0'],
 			['metadescription', $I['defaultmetadescription']],
 			['sysmessagetxt', 'ℹ️ &nbsp;'],
+			['hide_reload_post_box', '0'],
+			['hide_reload_messages', '0'],
+			['hide_profile', '0'],
+			['hide_admin', '0'],
+			['hide_notes', '0'],
+			['hide_clone', '0'],
+			['hide_rearrange', '0'],
+			['hide_help', '0'],
+			['max_refresh_rate', '150'],
+			['min_refresh_rate', '5'],
+			['postbox_delete_globally', '0'],
+			['allow_js', '1'],
 		];
 		$stmt=$db->prepare('INSERT INTO ' . PREFIX . 'settings (setting, value) VALUES (?, ?);');
 		foreach($settings as $pair){
@@ -3939,7 +4123,8 @@ function init_chat(){
 	print_end();
 }
 
-function update_db(){
+function update_db(): void
+{
 	global $I, $db, $memcached;
 	$dbversion=(int) get_setting('dbversion');
 	$msgencrypted=(bool) get_setting('msgencrypted');
@@ -4276,6 +4461,9 @@ function update_db(){
 	if($dbversion<46){
 		$db->exec('ALTER TABLE ' . PREFIX . 'members ADD COLUMN loginfails integer unsigned NOT NULL DEFAULT 0;');
 	}
+	if($dbversion<47){
+		$db->exec('INSERT INTO ' . PREFIX . "settings (setting,value) VALUES ('hide_reload_post_box', '0'), ('hide_reload_messages', '0'),('hide_profile', '0'),('hide_admin', '0'),('hide_notes', '0'),('hide_clone', '0'),('hide_rearrange', '0'),('hide_help', '0'),('max_refresh_rate', '150'),('min_refresh_rate', '5'),('postbox_delete_globally', '0'),('allow_js', '1');");
+	}
 	update_setting('dbversion', DBVERSION);
 	if($msgencrypted!==MSGENCRYPTED){
 		if(!extension_loaded('sodium')){
@@ -4333,7 +4521,8 @@ function get_setting(string $setting) : string {
 	return $value;
 }
 
-function update_setting(string $setting, $value){
+function update_setting(string $setting, $value): void
+{
 	global $db, $memcached;
 	$stmt=$db->prepare('UPDATE ' . PREFIX . 'settings SET value=? WHERE setting=?;');
 	$stmt->execute([$value, $setting]);
@@ -4344,7 +4533,8 @@ function update_setting(string $setting, $value){
 
 // configuration, defaults and internals
 
-function check_db(){
+function check_db(): void
+{
 	global $I, $db, $memcached;
 	$options=[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION, PDO::ATTR_PERSISTENT=>PERSISTENT];
 	try{
@@ -4432,7 +4622,8 @@ function load_fonts() : array {
 	];
 }
 
-function load_lang(){
+function load_lang(): void
+{
 	global $I, $L, $language;
 	$L=[
 		'ar'	=>'العربية',
@@ -4473,10 +4664,11 @@ function load_lang(){
 	}
 }
 
-function load_config(){
+function load_config(): void
+{
 	mb_internal_encoding('UTF-8');
 	define('VERSION', '1.24.1'); // Script version
-	define('DBVERSION', 46); // Database layout version
+	define('DBVERSION', 47); // Database layout version
 	define('MSGENCRYPTED', false); // Store messages encrypted in the database to prevent other database users from reading them - true/false - visit the setup page after editing!
 	define('ENCRYPTKEY_PASS', 'MY_SECRET_KEY'); // Recommended length: 32. Encryption key for messages
 	define('AES_IV_PASS', '012345678912'); // Recommended length: 12. AES Encryption IV
