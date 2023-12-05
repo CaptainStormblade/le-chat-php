@@ -42,8 +42,11 @@ const LANGUAGES = [
 	'es' => ['name' => 'Español', 'locale' => 'es_ES', 'dir' => 'ltr'],
 	'fi' => ['name' => 'Suomi', 'locale' => 'fi_FI', 'dir' => 'ltr'],
 	'fr' => ['name' => 'Français', 'locale' => 'fr_FR', 'dir' => 'ltr'],
+	'hi' => ['name' => 'हिन्दी', 'locale' => 'hi', 'dir' => 'ltr'],
 	'id' => ['name' => 'Bahasa Indonesia', 'locale' => 'id_ID', 'dir' => 'ltr'],
 	'it' => ['name' => 'Italiano', 'locale' => 'it_IT', 'dir' => 'ltr'],
+	'nl' => ['name' => 'Nederlands', 'locale' => 'nl_NL', 'dir' => 'ltr'],
+	'pl' => ['name' => 'Polski', 'locale' => 'pl_PL', 'dir' => 'ltr'],
 	'pt' => ['name' => 'Português', 'locale' => 'pt_PT', 'dir' => 'ltr'],
 	'ru' => ['name' => 'Русский', 'locale' => 'ru_RU', 'dir' => 'ltr'],
 	'tr' => ['name' => 'Türkçe', 'locale' => 'tr_TR', 'dir' => 'ltr'],
@@ -87,7 +90,7 @@ function route(): void
 		send_waiting_room();
 	}elseif($_REQUEST['action']==='post'){
 		check_session();
-		if(isset($_POST['kick']) && isset($_POST['sendto']) && $_POST['sendto']!=='s _'){
+		if(isset($_POST['kick']) && isset($_POST['sendto']) && $_POST['sendto']!=='s *'){
 			if($U['status']>=5 || ($U['status']>=3 && (get_setting('memkickalways') || (get_count_mods()==0 && get_setting('memkick'))))){
 				if(isset($_POST['what']) && $_POST['what']==='purge'){
 					kick_chatter([$_POST['sendto']], $_POST['message'], true);
@@ -236,6 +239,7 @@ function route_admin() : string {
 	}elseif($_POST['do']==='guestaccess'){
 		if(isset($_POST['guestaccess']) && preg_match('/^[0123]$/', $_POST['guestaccess'])){
 			update_setting('guestaccess', $_POST['guestaccess']);
+			change_guest_access(intval($_POST['guestaccess']));
 		}
 	}elseif($_POST['do']==='filter'){
 		send_filter(manage_filter());
@@ -1222,7 +1226,7 @@ function send_admin(string $arg): void
 	echo '<table><tr><td><input type="text" name="topic" size="20" value="'.get_setting('topic').'"></td><td>';
 	echo submit(_('Change')).'</td></tr></table></form></td></tr></table></td></tr>';
 	thr();
-	echo '"<tr><td><table id="guestaccess"><tr><th>'._('Change Guestaccess').'</th><td>"';
+	echo '<tr><td><table id="guestaccess"><tr><th>'._('Change Guestaccess').'</th><td>';
 	echo form('admin', 'guestaccess');
 	echo '<table>';
 	echo '<tr><td><select name="guestaccess">';
@@ -2787,7 +2791,7 @@ function kick_chatter(array $names, string $mes, bool $purge) : bool {
 	$check=$db->prepare('SELECT style, entry FROM ' . PREFIX . 'sessions WHERE nickname=? AND status!=0 AND (status<? OR nickname=?);');
 	$stmt=$db->prepare('UPDATE ' . PREFIX . 'sessions SET lastpost=?, status=0, kickmessage=? WHERE nickname=?;');
 	$all=false;
-	if($names[0]==='s _'){
+	if($names[0]==='s *'){
 		$tmp=$db->query('SELECT nickname FROM ' . PREFIX . 'sessions WHERE status=1;');
 		$names=[];
 		while($name=$tmp->fetch(PDO::FETCH_NUM)){
@@ -2827,7 +2831,7 @@ function logout_chatter(array $names): void
 {
 	global $U, $db;
 	$stmt=$db->prepare('DELETE FROM ' . PREFIX . 'sessions WHERE nickname=? AND status<?;');
-	if($names[0]==='s _'){
+	if($names[0]==='s *'){
 		$tmp=$db->query('SELECT nickname FROM ' . PREFIX . 'sessions WHERE status=1;');
 		$names=[];
 		while($name=$tmp->fetch(PDO::FETCH_NUM)){
@@ -3775,13 +3779,13 @@ function save_setup(array $C): void
 {
 	global $db;
 	//sanity checks and escaping
-	foreach($C['msg_settings'] as $setting){
+	foreach($C['msg_settings'] as $setting => $title){
 		$_POST[$setting]=htmlspecialchars($_POST[$setting]);
 	}
-	foreach($C['number_settings'] as $setting){
+	foreach($C['number_settings'] as $setting => $title){
 		settype($_POST[$setting], 'int');
 	}
-	foreach($C['colour_settings'] as $setting){
+	foreach($C['colour_settings'] as $setting => $title){
 		if(preg_match('/^#([a-f0-9]{6})$/i', $_POST[$setting], $match)){
 			$_POST[$setting]=$match[1];
 		}else{
@@ -3791,8 +3795,8 @@ function save_setup(array $C): void
 	settype($_POST['guestaccess'], 'int');
 	if(!preg_match('/^[01234]$/', $_POST['guestaccess'])){
 		unset($_POST['guestaccess']);
-	}elseif($_POST['guestaccess']==4){
-		$db->exec('DELETE FROM ' . PREFIX . 'sessions WHERE status<7;');
+	}else{
+		change_guest_access(intval($_POST['guestaccess']));
 	}
 	settype($_POST['englobalpass'], 'int');
 	settype($_POST['captcha'], 'int');
@@ -3844,6 +3848,15 @@ function save_setup(array $C): void
 		if(isset($_POST[$setting])){
 			update_setting($setting, $_POST[$setting]);
 		}
+	}
+}
+
+function change_guest_access(int $guest_access) : void {
+	global $db;
+	if($guest_access === 4){
+		$db->exec('DELETE FROM ' . PREFIX . 'sessions WHERE status<7;');
+	}elseif($guest_access === 0){
+		$db->exec('DELETE FROM ' . PREFIX . 'sessions WHERE status<3;');
 	}
 }
 
